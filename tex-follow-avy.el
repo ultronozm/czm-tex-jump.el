@@ -38,13 +38,13 @@
 ;;
 ;; My use-package declaration:
 ;; 
-;; (use-package czm-tex-follow
-;;   :vc (:url "https://github.com/ultronozm/czm-tex-follow.el.git"
+;; (use-package tex-follow-avy
+;;   :vc (:url "https://github.com/ultronozm/tex-follow-avy.el.git"
 ;; 	    :rev :newest)
 ;;   :after latex avy
 ;;   :bind
 ;;   (:map LaTeX-mode-map
-;; 	("s-r" . czm/tex-follow-with-avy)))
+;; 	("s-r" . tex-follow-avy)))
 
 ;;; Code:
 
