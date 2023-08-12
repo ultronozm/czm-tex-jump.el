@@ -1,8 +1,11 @@
-;;; tex-follow-avy.el --- Follow references in a tex buffer using avy.  -*- lexical-binding: t; -*-
+;;; tex-follow-avy.el --- Follow references in a tex buffer using avy  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2023  Paul D. Nelson
 
 ;; Author: Paul D. Nelson <nelson.paul.david@gmail.com>
+;; Version: 1.0
+;; URL: https://github.com/ultronozm/tex-follow-avy.el
+;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: tex
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -57,6 +60,8 @@
   :type '(alist :key-type string :value-type function)
   :group 'tex-follow-avy)
 
+;; TODO: modify so that it aborts properly after C-g
+
 ;;;###autoload
 (defun tex-follow-avy (arg)
   "Follow a reference in the current buffer.
@@ -66,8 +71,7 @@ and yank it.  When ARG is a number, mark the reference."
   (let* ((start (point))
 	 (commands (mapcar #'car tex-follow-avy-spec-alist))
 	 (regexp (format "\\(.\\\\\\(%s\\)\\)\\(\\[.*?\\]\\)?{\\([^}]+\\)}"
-			 (regexp-opt commands)))
-	 )
+			 (regexp-opt commands))))
     (avy-with avy-goto-line
       (avy-jump regexp :group 1))
     (if (re-search-forward regexp nil t)
@@ -85,8 +89,7 @@ and yank it.  When ARG is a number, mark the reference."
 	    (activate-mark))
 	   (t
 	    (funcall (cdr (assoc type (reverse tex-follow-avy-spec-alist)))
-		     ref-name)
-	    )))
+		     ref-name))))
       (message "No reference found."))))
 
 (defun tex-follow-avy-ref (ref-name)
