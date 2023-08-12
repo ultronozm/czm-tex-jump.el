@@ -5,7 +5,7 @@
 ;; Author: Paul D. Nelson <nelson.paul.david@gmail.com>
 ;; Version: 1.0
 ;; URL: https://github.com/ultronozm/tex-follow-avy.el
-;; Package-Requires: ((emacs "25.1"))
+;; Package-Requires: ((emacs "25.1") (avy "0.5.0"))
 ;; Keywords: tex
 
 ;; This program is free software; you can redistribute it and/or modify
