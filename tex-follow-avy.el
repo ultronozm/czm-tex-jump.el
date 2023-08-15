@@ -5,7 +5,7 @@
 ;; Author: Paul D. Nelson <nelson.paul.david@gmail.com>
 ;; Version: 0.1
 ;; URL: https://github.com/ultronozm/tex-follow-avy.el
-;; Package-Requires: ((emacs "25.1") (avy "0.5.0"))
+;; Package-Requires: ((emacs "25.1") (avy "0.5.0") (czm-tex-util "0.1"))
 ;; Keywords: tex
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -50,6 +50,7 @@
 
 (require 'avy)
 (require 'outline)
+(require 'czm-tex-util)
 
 (defcustom tex-follow-avy-spec-alist
   '(("eqref" . tex-follow-avy-ref)
@@ -160,9 +161,12 @@ Searches in the current buffer and in tex files listed in
        (t
 	(message "Label not found: %s" ref-name))))))
 
-(defun tex-follow-avy-cite (cite-name)
+(cl-defun tex-follow-avy-cite (cite-name)
   "Follow citation CITE-NAME in the current buffer.
 Searches in bib files listed in \\bibliography{...} commands."
+  ;; function is a bit silly.  Why not just use reftex-view-crossref?
+  ;; Maybe you'll later want to update this to work in non-file
+  ;; buffers, with a "master" bib file?
   (interactive)
   (save-excursion
     (save-restriction
@@ -174,19 +178,19 @@ Searches in bib files listed in \\bibliography{...} commands."
             (recenter)
             (when outline-minor-mode
               (outline-show-entry)))
-        (if (re-search-forward "\\\\bibliography{\\([^}]+\\)}" nil t)
-            (let ((bibfile (concat (match-string 1) ".bib")))
-              (if (file-exists-p bibfile)
-                  (progn
-                    (find-file-other-window bibfile)
-                    (goto-char (point-min))
-                    (re-search-forward (format "@[^{]+{\\(%s\\)," cite-name))
-                    (goto-char (match-beginning 0))
-                    (recenter)
-                    (when outline-minor-mode
-                      (outline-show-entry))))
-              (message "Could not find bibliography file: %s" bibfile)))
-        (message "Citation not found: %s" cite-name)))))
+        (condition-case err
+            (let ((bibfiles (czm-tex-util-get-bib-files)))
+              (dolist (bibfile bibfiles)
+                (find-file-other-window bibfile)
+                (goto-char (point-min))
+                (when (re-search-forward (format "@[^{]+{\\(%s\\)," cite-name) nil t)
+                  (goto-char (match-beginning 0))
+                  (recenter)
+                  (when outline-minor-mode
+                    (outline-show-entry))
+                  (cl-return)))
+              (message "Citation not found: %s" cite-name))
+          (error (format "Error message: %s\n" (error-message-string err))))))))
 
 (defun tex-follow-avy-href (href-name)
   "Follow href HREF-NAME.
