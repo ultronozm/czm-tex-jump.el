@@ -1,10 +1,10 @@
-;;; tex-follow-avy.el --- Follow references in a tex buffer using avy  -*- lexical-binding: t; -*-
+;;; czm-tex-jump.el --- Jump to references in a tex buffer using avy  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2023  Paul D. Nelson
 
 ;; Author: Paul D. Nelson <nelson.paul.david@gmail.com>
 ;; Version: 0.0
-;; URL: https://github.com/ultronozm/tex-follow-avy.el
+;; URL: https://github.com/ultronozm/czm-tex-jump.el
 ;; Package-Requires: ((emacs "25.1") (avy "0.5.0") (czm-tex-util "0.0"))
 ;; Keywords: tex
 
@@ -28,7 +28,7 @@
 ;; doesn't work (e.g., indirect buffers and org latex src blocks), and
 ;; comes with the convenience of avy.
 ;; 
-;; To install, bind `tex-follow-avy' to a key in LaTeX mode.
+;; To install, bind `czm-tex-jump' to a key in LaTeX mode.
 ;; When you press the key, you will be prompted to select a reference
 ;; to follow.  The default behavior is to jump to the reference in the
 ;; current buffer.  If you provide a prefix argument via C-u, then the
@@ -38,13 +38,13 @@
 ;;
 ;; My use-package declaration:
 ;; 
-;; (use-package tex-follow-avy
-;;   :vc (:url "https://github.com/ultronozm/tex-follow-avy.el.git"
+;; (use-package czm-tex-jump
+;;   :vc (:url "https://github.com/ultronozm/czm-tex-jump.el.git"
 ;; 	    :rev :newest)
 ;;   :after latex avy
 ;;   :bind
 ;;   (:map LaTeX-mode-map
-;; 	("s-r" . tex-follow-avy)))
+;; 	("s-r" . czm-tex-jump)))
 
 ;;; Code:
 
@@ -52,25 +52,25 @@
 (require 'outline)
 (require 'czm-tex-util)
 
-(defcustom tex-follow-avy-spec-alist
-  '(("eqref" . tex-follow-avy-ref)
-    ("ref" . tex-follow-avy-ref)
-    ("cite" . tex-follow-avy-cite)
-    ("href" . tex-follow-avy-href))
+(defcustom czm-tex-jump-spec-alist
+  '(("eqref" . czm-tex-jump-ref)
+    ("ref" . czm-tex-jump-ref)
+    ("cite" . czm-tex-jump-cite)
+    ("href" . czm-tex-jump-href))
   "Alist of TeX reference commands and functions to follow them."
   :type '(alist :key-type string :value-type function)
-  :group 'tex-follow-avy)
+  :group 'czm-tex-jump)
 
 ;; TODO: modify so that it aborts properly after C-g
 
 ;;;###autoload
-(defun tex-follow-avy (arg)
+(defun czm-tex-jump (arg)
   "Follow a reference in the current buffer.
 When prefix arg ARG is a list, copy reference to the kill ring
 and yank it.  When ARG is a number, mark the reference."
   (interactive "P")
   (let* ((start (point))
-	 (commands (mapcar #'car tex-follow-avy-spec-alist))
+	 (commands (mapcar #'car czm-tex-jump-spec-alist))
 	 (regexp (format "\\(.\\\\\\(%s\\)\\)\\(\\[.*?\\]\\)?{\\([^}]+\\)}"
 			 (regexp-opt commands))))
     (avy-with avy-goto-line
@@ -89,11 +89,11 @@ and yank it.  When ARG is a number, mark the reference."
 	    (goto-char (match-end 0))
 	    (activate-mark))
 	   (t
-	    (funcall (cdr (assoc type (reverse tex-follow-avy-spec-alist)))
+	    (funcall (cdr (assoc type (reverse czm-tex-jump-spec-alist)))
 		     ref-name))))
       (message "No reference found."))))
 
-(defun tex-follow-avy-ref (ref-name)
+(defun czm-tex-jump-ref (ref-name)
   "Follow reference REF-NAME in the current buffer.
 Searches in the current buffer and in tex files listed in
 \\externaldocument{...} commands."
@@ -161,7 +161,7 @@ Searches in the current buffer and in tex files listed in
        (t
 	(message "Label not found: %s" ref-name))))))
 
-(cl-defun tex-follow-avy-cite (cite-name)
+(cl-defun czm-tex-jump-cite (cite-name)
   "Follow citation CITE-NAME in the current buffer.
 Searches in bib files listed in \\bibliography{...} commands."
   ;; function is a bit silly.  Why not just use reftex-view-crossref?
@@ -192,11 +192,11 @@ Searches in bib files listed in \\bibliography{...} commands."
               (message "Citation not found: %s" cite-name))
           (error (format "Error message: %s\n" (error-message-string err))))))))
 
-(defun tex-follow-avy-href (href-name)
+(defun czm-tex-jump-href (href-name)
   "Follow href HREF-NAME.
 This just calls `find-file'."
   (interactive)
   (find-file href-name))
 
-(provide 'tex-follow-avy)
-;;; tex-follow-avy.el ends here
+(provide 'czm-tex-jump)
+;;; czm-tex-jump.el ends here
