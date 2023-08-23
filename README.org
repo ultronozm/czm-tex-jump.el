@@ -4,7 +4,7 @@
 * Overview
 This package provides a command =czm-tex-jump= that supports following references in a TeX buffer using [[https://github.com/abo-abo/avy][avy]].  The functionality is roughly similar to that of [[https://www.gnu.org/software/emacs/manual/html_node/reftex/Viewing-Cross_002dReferences.html][reftex-view-crossref]], but useful in situations where reftex doesn't work (e.g., indirect buffers and org latex src blocks), and it's implemented using [[https://github.com/abo-abo/avy][avy]], so you don't have to spend keystrokes on navigation.
 
-Here's how it looks in action (using [[https://github.com/ultronozm/czm-preview.el][czm-preview.el]] and [[https://github.com/ultronozm/czm-tex-fold.el][czm-tex-fold.el]] to display equation numbers in the buffer):
+Here's how it looks in action (using [[https://github.com/ultronozm/czm-preview.el][czm-preview.el]] and [[https://github.com/ultronozm/czm-tex-fold.el][czm-tex-fold.el]] to display label numbers in the buffer):
 
 #+attr_html: :width 800px
 #+attr_latex: :width 800px
