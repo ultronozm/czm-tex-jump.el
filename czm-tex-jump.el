@@ -1,4 +1,4 @@
-;;; czm-tex-jump.el --- Jump to references in a tex buffer using avy  -*- lexical-binding: t; -*-
+;;; czm-tex-jump.el --- Jump to references in a TeX buffer using avy  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2023  Paul D. Nelson
 
@@ -23,7 +23,7 @@
 
 ;;; Commentary:
 
-;; Follow references in a tex buffer using avy.  This is similar to
+;; Follow references in a TeX buffer using avy.  This is similar to
 ;; `reftex-view-crossref', but useful in situations where reftex
 ;; doesn't work (e.g., indirect buffers and org latex src blocks), and
 ;; comes with the convenience of avy.
@@ -35,16 +35,6 @@
 ;; reference will be copied to the kill ring and yanked.  If you use
 ;; C-u C-u (or C-N for a number N), then the reference will be marked
 ;; for further action.
-;;
-;; My use-package declaration:
-;; 
-;; (use-package czm-tex-jump
-;;   :vc (:url "https://github.com/ultronozm/czm-tex-jump.el.git"
-;; 	    :rev :newest)
-;;   :after latex avy
-;;   :bind
-;;   (:map LaTeX-mode-map
-;; 	("s-r" . czm-tex-jump)))
 
 ;;; Code:
 
@@ -63,11 +53,19 @@
 
 ;; TODO: modify so that it aborts properly after C-g
 
+;; TODO: if anyone ends up using this, then add customization options
+;; for tweaking the behavior as far as when to use indirect buffers
+
 ;;;###autoload
 (defun czm-tex-jump (arg)
   "Follow a reference in the current buffer.
 When prefix arg ARG is a list, copy reference to the kill ring
-and yank it.  When ARG is a number, mark the reference."
+and yank it.  When ARG is a number, mark the reference.
+
+The reference will be located in the current buffer except when
+it is outside the current restriction or belongs to an external
+document; in the latter cases, it will be opened in a new,
+indirect buffer."
   (interactive "P")
   (let* ((start (point))
 	 (commands (mapcar #'car czm-tex-jump-spec-alist))
