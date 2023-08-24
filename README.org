@@ -8,13 +8,7 @@ Here's how it looks in action (using [[https://github.com/ultronozm/czm-preview.
 
 #+attr_html: :width 800px
 #+attr_latex: :width 800px
-[[./img/ref.gif]]
-
-
-#+attr_html: :width 800px
-#+attr_latex: :width 800px
-[[./img/cite.gif]]
-
+[[./img/both.gif]]
 
 
 * Configuration
