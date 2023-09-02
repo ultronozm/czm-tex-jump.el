@@ -54,7 +54,8 @@
 ;; TODO: modify so that it aborts properly after C-g
 
 ;; TODO: if anyone ends up using this, then add customization options
-;; for tweaking the behavior as far as when to use indirect buffers
+;; for tweaking the behavior as far as when to use indirect buffers.
+;; Maybe it would be best to invoke display-buffer somehow?
 
 ;;;###autoload
 (defun czm-tex-jump (arg)
