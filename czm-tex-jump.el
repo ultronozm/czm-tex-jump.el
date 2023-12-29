@@ -69,8 +69,14 @@ indirect buffer."
   (interactive "P")
   (let* ((start (point))
 	        (commands (mapcar #'car czm-tex-jump-spec-alist))
-	        (regexp (format "\\(.\\\\\\(%s\\)\\)\\(\\[.*?\\]\\)?{\\([^}]+\\)}"
-			                      (regexp-opt commands))))
+         (regexp (eval `(rx (seq (group anychar "\\"
+                                        (group
+                                         (or ,@commands)))
+                                 (opt (group "[" (*? nonl)
+                                             "]"))
+                                 "{"
+                                 (group (one-or-more (not (any "}"))))
+                                 "}")))))
     (avy-with avy-goto-line
       (avy-jump regexp :group 1))
     (if (re-search-forward regexp nil t)

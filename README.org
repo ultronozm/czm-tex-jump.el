@@ -25,3 +25,6 @@ Replace "s-r" with your preferred key binding.
 
 * Usage
 When you run =czm-tex-jump=, you will be prompted [[https://github.com/abo-abo/avy][avy]]-style to select a reference to follow.  By supplying one or more prefix arguments to this command, you can change the behavior: see the documentation (=C-h f czm-tex-jump=) for details.
+
+* Issues
+If \ref{...} appears at the beginning of a line, then the avy anchor will appear at the end of the previous line, which may be slightly counterintuitive.  (This is because I use the character before the backslash in "\ref{...}" as the anchor for avy.  It would be natural to anchor instead on the backslash itself, but I'm in the habit of folding the full string "\ref{...}" using [[https://github.com/ultronozm/czm-tex-fold.el][czm-tex-fold.el]], and avy doesn't cooperate with folds.)  A workaround is to avoid putting \ref{...} at the beginning of a line.
