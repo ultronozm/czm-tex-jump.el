@@ -68,27 +68,28 @@ document; in the latter cases, it will be opened in a new,
 indirect buffer."
   (interactive "P")
   (let* ((start (point))
-	 (commands (mapcar #'car czm-tex-jump-spec-alist))
-	 (regexp (format "\\(.\\\\\\(%s\\)\\)\\(\\[.*?\\]\\)?{\\([^}]+\\)}"
-			 (regexp-opt commands))))
+	        (commands (mapcar #'car czm-tex-jump-spec-alist))
+	        (regexp (format "\\(.\\\\\\(%s\\)\\)\\(\\[.*?\\]\\)?{\\([^}]+\\)}"
+			                      (regexp-opt commands))))
     (avy-with avy-goto-line
       (avy-jump regexp :group 1))
     (if (re-search-forward regexp nil t)
-	(let ((ref (substring (match-string 0) 1))
-	      (type (match-string 2))
-	      (ref-name (match-string 4)))
-	  (cond
-	   ((and arg (listp arg))
-	    (kill-new ref)
-	    (goto-char start)
-	    (yank))
-	   ((and arg (numberp arg))
-	    (push-mark (1+ (match-beginning 0)))
-	    (goto-char (match-end 0))
-	    (activate-mark))
-	   (t
-	    (funcall (cdr (assoc type (reverse czm-tex-jump-spec-alist)))
-		     ref-name))))
+	       (let ((ref (substring (match-string 0)
+                              1))
+	             (type (match-string 2))
+	             (ref-name (match-string 4)))
+	         (cond
+	          ((and arg (listp arg))
+	           (kill-new ref)
+	           (goto-char start)
+	           (yank))
+	          ((and arg (numberp arg))
+	           (push-mark (1+ (match-beginning 0)))
+	           (goto-char (match-end 0))
+	           (activate-mark))
+	          (t
+	           (funcall (cdr (assoc type (reverse czm-tex-jump-spec-alist)))
+		                   ref-name))))
       (message "No reference found."))))
 
 (defun czm-tex-jump-ref (ref-name)
