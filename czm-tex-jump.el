@@ -46,7 +46,8 @@
   '(("eqref" . czm-tex-jump-ref)
     ("ref" . czm-tex-jump-ref)
     ("cite" . czm-tex-jump-cite)
-    ("href" . czm-tex-jump-href))
+    ("href" . czm-tex-jump-href)
+    ("url" . czm-tex-jump-url))
   "Alist of TeX reference commands and functions to follow them."
   :type '(alist :key-type string :value-type function)
   :group 'czm-tex-jump)
@@ -203,6 +204,12 @@ Searches in bib files listed in \\bibliography{...} commands."
 This just calls `find-file'."
   (interactive)
   (find-file href-name))
+
+(defun czm-tex-jump-url (url-name)
+  "Follow url URL-NAME.
+This just calls `browse-url'."
+  (interactive)
+  (browse-url url-name))
 
 (provide 'czm-tex-jump)
 ;;; czm-tex-jump.el ends here
