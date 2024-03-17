@@ -106,67 +106,75 @@ Searches in the current buffer and in tex files listed in
 \\externaldocument{...} commands."
   (interactive)
   (cl-flet ((search-for-label (name)
-	      (save-excursion
-		(goto-char (point-min))
-		(when (re-search-forward
-		       (format "\\\\label{%s}" (regexp-quote name)) nil t)
+	             (save-excursion
+		              (goto-char (point-min))
+		              (when (re-search-forward
+		                     (format "\\\\label{%s}" (regexp-quote name))
+                       nil t)
                   (match-beginning 0)))))
     (let (label-pos buf)
       (cond
        ;; Search current buffer, with narrowing restriction.
        ((setq label-pos
-	      (search-for-label ref-name))
-	(goto-char label-pos)
-	(recenter)
-	(when outline-minor-mode
-	  (outline-show-entry)))
+	             (search-for-label ref-name))
+	       (goto-char label-pos)
+	       (recenter)
+	       (when outline-minor-mode
+          (condition-case nil
+              (outline-show-entry)
+            (error nil))
+	         ;; (outline-show-entry)
+          ))
        ;; Search current buffer, without narrowing restriction.
        ((save-restriction
-	  (widen)
-	  (setq label-pos (search-for-label ref-name)))
-	(clone-indirect-buffer-other-window
-	 (generate-new-buffer-name (buffer-name)) t)
-	(widen)
-	(goto-char label-pos)
+	         (widen)
+	         (setq label-pos (search-for-label ref-name)))
+	       (clone-indirect-buffer-other-window
+	        (generate-new-buffer-name (buffer-name))
+         t)
+	       (widen)
+	       (goto-char label-pos)
         (recenter)
-	(when outline-minor-mode
-	  (outline-show-entry)))
+	       (when outline-minor-mode
+	         (outline-show-entry)))
        ;; Search external documents.
        ((save-restriction
-	  (widen)
-	  (save-excursion
-	    (goto-char (point-min))
-	    (while
-		(and
-		 (null label-pos)
-		 (re-search-forward "\\\\externaldocument{\\([^}]+\\)}" nil t))
-	      (let*
-		  ((filename (concat (match-string 1) ".tex"))
-		   (already-open (find-buffer-visiting filename)))
-		(setq buf (or already-open
-			      (find-file-noselect filename)))
-		(setq label-pos (with-current-buffer
-				    buf
-				  (save-restriction
-				    (widen)
-				    (search-for-label ref-name))))
-		;; (unless already-open
-		;;   (kill-buffer buf))
-		))
-	    label-pos))
-	(switch-to-buffer-other-window buf)
-	(if (and (>= label-pos (point-min))
-		 (<= label-pos (point-max)))
-	    (goto-char label-pos)
-	  (clone-indirect-buffer-other-window
-	   (generate-new-buffer-name (buffer-name)) t)
-	  (widen)
-	  (goto-char label-pos))
-	(recenter)
-	(when outline-minor-mode
-	  (outline-show-entry)))
+	         (widen)
+	         (save-excursion
+	           (goto-char (point-min))
+	           (while
+		              (and
+		               (null label-pos)
+		               (re-search-forward "\\\\externaldocument{\\([^}]+\\)}" nil t))
+	             (let*
+		                ((filename (concat (match-string 1)
+                                     ".tex"))
+		                 (already-open (find-buffer-visiting filename)))
+		              (setq buf (or already-open
+			                           (find-file-noselect filename)))
+		              (setq label-pos (with-current-buffer
+				                                buf
+				                              (save-restriction
+				                                (widen)
+				                                (search-for-label ref-name))))
+		              ;; (unless already-open
+		              ;;   (kill-buffer buf))
+		              ))
+	           label-pos))
+	       (switch-to-buffer-other-window buf)
+	       (if (and (>= label-pos (point-min))
+		               (<= label-pos (point-max)))
+	           (goto-char label-pos)
+	         (clone-indirect-buffer-other-window
+	          (generate-new-buffer-name (buffer-name))
+           t)
+	         (widen)
+	         (goto-char label-pos))
+	       (recenter)
+	       (when outline-minor-mode
+	         (outline-show-entry)))
        (t
-	(message "Label not found: %s" ref-name))))))
+	       (message "Label not found: %s" ref-name))))))
 
 (cl-defun czm-tex-jump-cite (cite-name)
   "Follow citation CITE-NAME in the current buffer.
