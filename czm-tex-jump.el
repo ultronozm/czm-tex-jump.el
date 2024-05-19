@@ -5,7 +5,7 @@
 ;; Author: Paul D. Nelson <nelson.paul.david@gmail.com>
 ;; Version: 0.0
 ;; URL: https://github.com/ultronozm/czm-tex-jump.el
-;; Package-Requires: ((emacs "25.1") (avy "0.5.0") (czm-tex-util "0.0"))
+;; Package-Requires: ((emacs "29.1") (avy "0.5.0") (embark "1.0") (czm-tex-util "0.0") (tex-parens "0.1"))
 ;; Keywords: tex
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -28,19 +28,21 @@
 ;; doesn't work (e.g., indirect buffers and org latex src blocks), and
 ;; comes with the convenience of avy.
 ;; 
-;; To install, bind `czm-tex-jump' to a key in LaTeX mode.
-;; When you press the key, you will be prompted to select a reference
-;; to follow.  The default behavior is to jump to the reference in the
-;; current buffer.  If you provide a prefix argument via C-u, then the
-;; reference will be copied to the kill ring and yanked.  If you use
-;; C-u C-u (or C-N for a number N), then the reference will be marked
-;; for further action.
+;; To install, bind `czm-tex-jump' to a key in LaTeX mode.  When you
+;; press the key, you will be prompted to select a reference to
+;; follow.  The default behavior is to jump to the reference in the
+;; current buffer.  If you provide a prefix argument via C-u, then you
+;; can use `embark' to perform additional actions (TODO: explain
+;; more).
 
 ;;; Code:
 
 (require 'avy)
 (require 'outline)
+(require 'reftex)
 (require 'czm-tex-util)
+(require 'embark)
+(require 'tex-parens)
 
 (defcustom czm-tex-jump-spec-alist
   '(("eqref" . czm-tex-jump-ref)
@@ -52,53 +54,125 @@
   :type '(alist :key-type string :value-type function)
   :group 'czm-tex-jump)
 
-;; TODO: modify so that it aborts properly after C-g
+(defun czm-tex-jump--commands ()
+  (mapcar #'car czm-tex-jump-spec-alist))
 
-;; TODO: if anyone ends up using this, then add customization options
-;; for tweaking the behavior as far as when to use indirect buffers.
-;; Maybe it would be best to invoke display-buffer somehow?
+(defun czm-tex-jump--regexp ()
+  (eval `(rx (seq  "\\"
+                   (group
+                    (or ,@(czm-tex-jump--commands)))
+                   (opt (group "[" (*? nonl)
+                               "]"))
+                   "{"
+                   (group (one-or-more (not (any "}"))))
+                   "}"))))
 
-;;;###autoload
-(defun czm-tex-jump (arg)
-  "Follow a reference in the current buffer.
-When prefix arg ARG is a list, copy reference to the kill ring
-and yank it.  When ARG is a number, mark the reference.
+(defun czm-tex-jump-coolview-region (start end)
+  (interactive "r")
+  (deactivate-mark)
+  (let* ((new-buff (clone-indirect-buffer nil nil))
+         (below-window (split-window-below))
+         (above-window (selected-window)))
+    (run-with-timer 0.1 nil
+                    (lambda ()
+                      (save-selected-window
+                        (select-window above-window)
+                        (shrink-window-if-larger-than-buffer))))
+    (switch-to-buffer new-buff)
+    (narrow-to-region start end)
+    below-window))
 
-The reference will be located in the current buffer except when
-it is outside the current restriction or belongs to an external
-document; in the latter cases, it will be opened in a new,
-indirect buffer."
+(defun czm-tex-jump-avy (&optional arg)
+  "Avy command for jumping to TeX references in the current buffer."
   (interactive "P")
-  (let* ((start (point))
-	        (commands (mapcar #'car czm-tex-jump-spec-alist))
-         (regexp (eval `(rx (seq (group anychar "\\"
-                                        (group
-                                         (or ,@commands)))
-                                 (opt (group "[" (*? nonl)
-                                             "]"))
-                                 "{"
-                                 (group (one-or-more (not (any "}"))))
-                                 "}")))))
-    (avy-with avy-goto-line
-      (avy-jump regexp :group 1))
-    (if (re-search-forward regexp nil t)
-	       (let ((ref (substring (match-string 0)
-                              1))
-	             (type (match-string 2))
-	             (ref-name (match-string 4)))
-	         (cond
-	          ((and arg (listp arg))
-	           (kill-new ref)
-	           (goto-char start)
-	           (yank))
-	          ((and arg (numberp arg))
-	           (push-mark (1+ (match-beginning 0)))
-	           (goto-char (match-end 0))
-	           (activate-mark))
-	          (t
+  (let* ((regexp (concat "\\([^z-a]" (czm-tex-jump--regexp) "\\)")))
+    (avy-with avy-goto-char
+      (let ((current-prefix-arg nil))
+        (when (avy-jump regexp :group 1)
+          (forward-char 1)
+          (if arg
+              (embark-act)
+            (embark-dwim)))))))
+
+(defun czm-tex-jump--embark-target ()
+  "Target the TeX reference at point."
+  (let* ((commands '("eqref" "ref" "cite" "href" "url"))
+         (pattern (rx-to-string
+                   `(seq (group "\\"
+                                (group
+                                 (or ,@commands)))
+                         (opt (group "[" (*? nonl)
+                                     "]"))
+                         "{"
+                         (group (one-or-more (not (any "}"))))
+                         "}")))
+         start end)
+    (save-excursion
+      (when (thing-at-point-looking-at pattern)
+        (setq start (match-beginning 0)
+              end (match-end 0))
+        `(tex-ref ,(buffer-substring-no-properties start end) ,start . ,end)))))
+
+(defun czm-tex-jump-setup ()
+  (add-to-list 'embark-target-finders 'czm-tex-jump--embark-target)
+  (add-to-list 'embark-keymap-alist '(tex-ref . czm-tex-jump-embark-map)))
+
+(defun czm-tex-jump-coolview ()
+  (interactive)
+  (let* ((start (point)))
+    (if (re-search-forward (czm-tex-jump--regexp) nil t)
+        (let ((type (match-string 1))
+	             (ref-name (match-string 3)))
+	         (save-restriction
+            (widen)
 	           (funcall (cdr (assoc type (reverse czm-tex-jump-spec-alist)))
-		                   ref-name))))
+		                   ref-name)
+            (let* ((beg
+                    (save-excursion
+                      (tex-parens-backward-up-list)
+                      (point)))
+                   (end
+                    (save-excursion
+                      (tex-parens-up-list)
+                      (point)))
+                   (below-window (czm-tex-jump-coolview-region beg end)))
+              (save-excursion
+                (select-window below-window)
+                (goto-char start)))))
       (message "No reference found."))))
+
+(defun czm-tex-jump-goto (_str)
+  "Jump to the tex reference at point."
+  ;; Assumption: the reference name is enclosed by {...}
+  (let* ((commands '("eqref" "ref" "cite" "href" "url"))
+         (pattern (rx-to-string
+                   `(seq (group "\\"
+                                (group
+                                 (or ,@commands)))
+                         (opt (group "[" (*? nonl)
+                                     "]"))
+                         "{"
+                         (group (one-or-more (not (any "}"))))
+                         "}"))))
+    (if (re-search-forward pattern nil t)
+        (let ((type (match-string 2))
+	             (ref-name (match-string 4)))
+	         (funcall (cdr (assoc type (reverse czm-tex-jump-spec-alist)))
+		                 ref-name))
+      (message "No reference found."))))
+
+(defun czm-tex-jump-view-crossref ()
+  (interactive)
+  (save-excursion
+    (search-forward "{")
+    (reftex-view-crossref)))
+
+(defvar-keymap czm-tex-jump-embark-map
+  :doc "Keymap for actions on tex references."
+  :parent embark-general-map
+  "RET" 'czm-tex-jump-goto
+  "v" 'czm-tex-jump-view-crossref
+  "c" 'czm-tex-jump-coolview)
 
 (defun czm-tex-jump-ref (ref-name)
   "Follow reference REF-NAME in the current buffer.
@@ -156,10 +230,7 @@ Searches in the current buffer and in tex files listed in
 				                                buf
 				                              (save-restriction
 				                                (widen)
-				                                (search-for-label ref-name))))
-		              ;; (unless already-open
-		              ;;   (kill-buffer buf))
-		              ))
+				                                (search-for-label ref-name))))))
 	           label-pos))
 	       (switch-to-buffer-other-window buf)
 	       (if (and (>= label-pos (point-min))
