@@ -94,6 +94,47 @@
               (embark-act)
             (embark-dwim)))))))
 
+(defun czm-tex-jump (arg)
+  "Follow a reference in the current buffer.
+When prefix arg ARG is a list, copy reference to the kill ring
+and yank it.  When ARG is a number, mark the reference.
+
+The reference will be located in the current buffer except when
+it is outside the current restriction or belongs to an external
+document; in the latter cases, it will be opened in a new,
+indirect buffer."
+  (interactive "P")
+  (let* ((start (point))
+	        (commands (mapcar #'car czm-tex-jump-spec-alist))
+         (regexp (eval `(rx (seq (group anychar "\\"
+                                        (group
+                                         (or ,@commands)))
+                                 (opt (group "[" (*? nonl)
+                                             "]"))
+                                 "{"
+                                 (group (one-or-more (not (any "}"))))
+                                 "}")))))
+    (avy-with avy-goto-line
+      (avy-jump regexp :group 1))
+    (if (re-search-forward regexp nil t)
+	       (let ((ref (substring (match-string 0)
+                              1))
+	             (type (match-string 2))
+	             (ref-name (match-string 4)))
+	         (cond
+	          ((and arg (listp arg))
+	           (kill-new ref)
+	           (goto-char start)
+	           (yank))
+	          ((and arg (numberp arg))
+	           (push-mark (1+ (match-beginning 0)))
+	           (goto-char (match-end 0))
+	           (activate-mark))
+	          (t
+	           (funcall (cdr (assoc type (reverse czm-tex-jump-spec-alist)))
+		                   ref-name))))
+      (message "No reference found."))))
+
 (defun czm-tex-jump--embark-target ()
   "Target the TeX reference at point."
   (let* ((commands '("eqref" "ref" "cite" "href" "url"))
@@ -141,6 +182,19 @@
                 (goto-char start)))))
       (message "No reference found."))))
 
+(defun czm-tex-jump-view-crossref ()
+  (interactive)
+  (save-excursion
+    (search-forward "{")
+    (reftex-view-crossref)))
+
+(defvar-keymap czm-tex-jump-embark-map
+  :doc "Keymap for actions on tex references."
+  :parent embark-general-map
+  "RET" 'czm-tex-jump-goto
+  "v" 'czm-tex-jump-view-crossref
+  "c" 'czm-tex-jump-coolview)
+
 (defun czm-tex-jump-goto (_str)
   "Jump to the tex reference at point."
   ;; Assumption: the reference name is enclosed by {...}
@@ -154,25 +208,15 @@
                          "{"
                          (group (one-or-more (not (any "}"))))
                          "}"))))
-    (if (re-search-forward pattern nil t)
+    (if (thing-at-point-looking-at pattern)
         (let ((type (match-string 2))
 	             (ref-name (match-string 4)))
 	         (funcall (cdr (assoc type (reverse czm-tex-jump-spec-alist)))
 		                 ref-name))
       (message "No reference found."))))
 
-(defun czm-tex-jump-view-crossref ()
-  (interactive)
-  (save-excursion
-    (search-forward "{")
-    (reftex-view-crossref)))
-
-(defvar-keymap czm-tex-jump-embark-map
-  :doc "Keymap for actions on tex references."
-  :parent embark-general-map
-  "RET" 'czm-tex-jump-goto
-  "v" 'czm-tex-jump-view-crossref
-  "c" 'czm-tex-jump-coolview)
+;; (defun czm-tex-jump-goto (_str)
+;;   (czm-tex-find-definition (czm-tex-identifier-at-point)))
 
 (defun czm-tex-jump-ref (ref-name)
   "Follow reference REF-NAME in the current buffer.
@@ -289,6 +333,89 @@ This just calls `find-file'."
 This just calls `browse-url'."
   (interactive)
   (browse-url url-name))
+
+
+;;; xref stuff
+
+(defun czm-tex-xref-backend ()
+  "LaTeX xref backend."
+  'czm-tex)
+
+(defun czm-tex-identifier-at-point ()
+  "Identify the LaTeX reference at point."
+  ;; Adapted from czm-tex-jump-goto
+  (let* ((commands '("eqref" "ref" "cite" "href" "url"))
+         (pattern (rx-to-string
+                   `(seq (group "\\" (group (or ,@commands)))
+                         (opt (group "[" (*? nonl) "]"))
+                         "{"
+                         (group (one-or-more (not (any "}"))))
+                         "}"))))
+    (if (thing-at-point-looking-at pattern)
+        (match-string 4))))
+
+(cl-defmethod xref-backend-identifier-at-point ((_backend (eql czm-tex)))
+  (czm-tex-identifier-at-point))
+
+(cl-defmethod xref-backend-definitions ((_backend (eql czm-tex)) identifier)
+  (let ((location (czm-tex-find-definition identifier)))
+    (when location
+      (list (xref-make identifier
+                       (xref-make-file-location
+                        (cl-first location)
+                        (cl-second location)
+                        0))))))
+
+(cl-defun czm-tex-find-definition (identifier)
+  "Find the definition of IDENTIFIER in the current buffer or linked files."
+  (let ((ref-location nil)
+        (ref-type (thing-at-point-looking-at (regexp-opt '("\\ref" "\\cite" "\\href" "\\url")))))
+    (cond
+     ((and ref-type (string= ref-type "\\cite"))
+      (czm-tex-find-definition-in-citations identifier))
+     ((and ref-type (string= ref-type "\\href"))
+      (list (czm-tex-find-definition-in-href identifier)))
+     (t
+      (setq ref-location (czm-tex-find-definition-in-current-buffer identifier))
+      (or ref-location (czm-tex-find-definition-in-external-docs identifier))))))
+
+(defun czm-tex-find-definition-in-current-buffer (identifier)
+  (save-excursion
+    (goto-char (point-min))
+    (when (re-search-forward (format "\\\\label{%s}" (regexp-quote identifier)) nil t)
+      (list (buffer-file-name) (line-number-at-pos (match-beginning 0))))))
+
+(defun czm-tex-find-definition-in-external-docs (identifier)
+  (save-excursion
+    (goto-char (point-min))
+    (when (re-search-forward "\\\\externaldocument{\\([^}]+\\)}" nil t)
+      (let* ((filename (concat (match-string 1) ".tex"))
+             (buffer (or (find-buffer-visiting filename)
+                         (find-file-noselect filename))))
+        (with-current-buffer buffer
+          (save-excursion
+            (goto-char (point-min))
+            (when (re-search-forward (format "\\\\label{%s}" (regexp-quote identifier)) nil t)
+              (list (buffer-file-name) (line-number-at-pos (match-beginning 0))))))))))
+
+(defun czm-tex-find-definition-in-citations (identifier)
+  (save-excursion
+    (goto-char (point-min))
+    (when (re-search-forward
+           (format "\\\\bibitem{\\(%s\\)}" (regexp-quote identifier)) nil t)
+      (list (buffer-file-name) (line-number-at-pos (match-beginning 0))))))
+
+(defun czm-tex-find-definition-in-href (identifier)
+  (list identifier))
+
+(cl-defmethod xref-backend-references ((_backend (eql czm-tex)) name)
+  ;; Similar to definitions, but you'd need to look in reverse.
+  ;; This is left as an exercise.
+  (message "References not implemented."))
+
+(add-hook 'TeX-mode-hook
+          (lambda ()
+            (add-hook 'xref-backend-functions #'czm-tex-xref-backend nil t)))
 
 (provide 'czm-tex-jump)
 ;;; czm-tex-jump.el ends here
