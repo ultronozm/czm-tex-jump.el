@@ -298,11 +298,11 @@ Searches in bib files listed in \\bibliography{...} commands."
   ;; Maybe you'll later want to update this to work in non-file
   ;; buffers, with a "master" bib file?
   (interactive)
-  (save-excursion
+  (let ((pos (point)))
     (save-restriction
       (widen)
       (goto-char (point-min))
-      (if (re-search-forward (format "\\\\bibitem{\\(%s\\)}" (regexp-quote cite-name)) nil t)
+      (if (re-search-forward (format "\\\\bibitem\\(\\[[^]]*\\]\\)?{\\(%s\\)}" (regexp-quote cite-name)) nil t)
           (progn
             (goto-char (match-beginning 0))
             (recenter)
@@ -319,7 +319,8 @@ Searches in bib files listed in \\bibliography{...} commands."
                   (when outline-minor-mode
                     (outline-show-entry))
                   (cl-return)))
-              (message "Citation not found: %s" cite-name))
+              (message "Citation not found: %s" cite-name)
+              (goto-char pos))
           (error (format "Error message: %s\n" (error-message-string err))))))))
 
 (defun czm-tex-jump-href (href-name)
