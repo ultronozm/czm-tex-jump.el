@@ -95,14 +95,17 @@
             (embark-dwim)))))))
 
 (defun czm-tex-jump (arg)
-  "Follow a reference in the current buffer.
-When prefix arg ARG is a list, copy reference to the kill ring
-and yank it.  When ARG is a number, mark the reference.
+  "Jump to the label corresponding to a reference.
+With a \\[universal-argument] prefix ARG, copy the reference to the kill
+ring and yank it.  With numerical prefix ARG, move point to the end of
+the reference, set the mark at the beginning, and activate the mark.
 
-The reference will be located in the current buffer except when
-it is outside the current restriction or belongs to an external
-document; in the latter cases, it will be opened in a new,
-indirect buffer."
+With no prefix argument, jump to the reference.  Use the current buffer
+unless the reference is in an external document (in which case use a
+buffer visiting said document) or outside the current restriction (in
+which case use a new indirect buffer).
+
+Push mark at previous position."
   (interactive "P")
   (let* ((start (point))
 	        (commands (mapcar #'car czm-tex-jump-spec-alist))
