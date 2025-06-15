@@ -95,7 +95,7 @@
             (embark-dwim)))))))
 
 (defun czm-tex-jump (arg)
-  "Jump to the label corresponding to a reference.
+  "Jump to the label corresponding to the reference selected via `avy'.
 With a \\[universal-argument] prefix ARG, copy the reference to the kill
 ring and yank it.  With numerical prefix ARG, move point to the end of
 the reference, set the mark at the beginning, and activate the mark.
