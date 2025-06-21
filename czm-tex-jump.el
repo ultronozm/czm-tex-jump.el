@@ -134,6 +134,7 @@ Push mark at previous position."
 	           (goto-char (match-end 0))
 	           (activate-mark))
 	          (t
+            (push-mark start)
 	           (funcall (cdr (assoc type (reverse czm-tex-jump-spec-alist)))
 		                   ref-name))))
       (message "No reference found."))))
