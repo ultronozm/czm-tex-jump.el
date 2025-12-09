@@ -39,6 +39,7 @@
 
 (require 'avy)
 (require 'outline)
+(require 'xref)
 (require 'reftex)
 (require 'czm-tex-util)
 (require 'embark)
@@ -413,7 +414,7 @@ This just calls `browse-url'."
 (defun czm-tex-find-definition-in-href (identifier)
   (list identifier))
 
-(cl-defmethod xref-backend-references ((_backend (eql czm-tex)) name)
+(cl-defmethod xref-backend-references ((_backend (eql czm-tex)) _name)
   ;; Similar to definitions, but you'd need to look in reverse.
   ;; This is left as an exercise.
   (message "References not implemented."))
