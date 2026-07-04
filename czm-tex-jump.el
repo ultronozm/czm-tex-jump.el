@@ -50,10 +50,16 @@
     ("ref" . czm-tex-jump-ref)
     ("cite" . czm-tex-jump-cite)
     ("href" . czm-tex-jump-href)
-    ("url" . czm-tex-jump-url))
+    ("url" . czm-tex-jump-url)
+    ("externaldocument" . czm-tex-jump-externaldocument)
+    ("externalcitedocument" . czm-tex-jump-externaldocument))
   "Alist of TeX reference commands and functions to follow them."
   :type '(alist :key-type string :value-type function)
   :group 'czm-tex-jump)
+
+(defun czm-tex-jump-externaldocument (file-name)
+  "Visit the LaTeX source of the external document FILE-NAME."
+  (find-file (concat file-name ".tex")))
 
 (defun czm-tex-jump--commands ()
   (mapcar #'car czm-tex-jump-spec-alist))
@@ -267,18 +273,29 @@ Searches in the current buffer and in tex files listed in
 	           (while
 		              (and
 		               (null label-pos)
-		               (re-search-forward "\\\\externaldocument{\\([^}]+\\)}" nil t))
-	             (let*
-		                ((filename (concat (match-string 1)
-                                     ".tex"))
-		                 (already-open (find-buffer-visiting filename)))
-		              (setq buf (or already-open
-			                           (find-file-noselect filename)))
-		              (setq label-pos (with-current-buffer
-				                                buf
-				                              (save-restriction
-				                                (widen)
-				                                (search-for-label ref-name))))))
+		               (re-search-forward
+                  "\\\\external\\(?:cite\\)?document\\(?:\\[\\([^]]*\\)\\]\\)?{\\([^}]+\\)}"
+                  nil t))
+              ;; xr imports label FOO from the external document as
+              ;; PREFIXFOO, so search the external file for the label
+              ;; with the prefix stripped, and skip documents whose
+              ;; prefix does not match.
+	             (let ((prefix (match-string 1))
+                    (external (match-string 2)))
+                (when (or (null prefix) (string-prefix-p prefix ref-name))
+	                 (let*
+		                    ((filename (concat external ".tex"))
+                       (bare-name (if prefix
+                                      (substring ref-name (length prefix))
+                                    ref-name))
+		                     (already-open (find-buffer-visiting filename)))
+		                  (setq buf (or already-open
+			                               (find-file-noselect filename)))
+		                  (setq label-pos (with-current-buffer
+				                                    buf
+				                                  (save-restriction
+				                                    (widen)
+				                                    (search-for-label bare-name))))))))
 	           label-pos))
 	       (switch-to-buffer-other-window buf)
 	       (if (and (>= label-pos (point-min))
@@ -388,17 +405,35 @@ This just calls `browse-url'."
       (list (buffer-file-name) (line-number-at-pos (match-beginning 0))))))
 
 (defun czm-tex-find-definition-in-external-docs (identifier)
+  "Find IDENTIFIER's defining \\label in \\externaldocument files.
+Checks every \\externaldocument declaration, honoring optional label
+prefixes: xr imports label FOO from a document declared with prefix P as
+PFOO, so the external file is searched with the prefix stripped."
   (save-excursion
     (goto-char (point-min))
-    (when (re-search-forward "\\\\externaldocument{\\([^}]+\\)}" nil t)
-      (let* ((filename (concat (match-string 1) ".tex"))
-             (buffer (or (find-buffer-visiting filename)
-                         (find-file-noselect filename))))
-        (with-current-buffer buffer
-          (save-excursion
-            (goto-char (point-min))
-            (when (re-search-forward (format "\\\\label{%s}" (regexp-quote identifier)) nil t)
-              (list (buffer-file-name) (line-number-at-pos (match-beginning 0))))))))))
+    (let (result)
+      (while (and (null result)
+                  (re-search-forward
+                   "\\\\external\\(?:cite\\)?document\\(?:\\[\\([^]]*\\)\\]\\)?{\\([^}]+\\)}"
+                   nil t))
+        (let ((prefix (match-string 1))
+              (external (match-string 2)))
+          (when (or (null prefix) (string-prefix-p prefix identifier))
+            (let* ((filename (concat external ".tex"))
+                   (bare (if prefix
+                             (substring identifier (length prefix))
+                           identifier))
+                   (buffer (or (find-buffer-visiting filename)
+                               (find-file-noselect filename))))
+              (setq result
+                    (with-current-buffer buffer
+                      (save-excursion
+                        (goto-char (point-min))
+                        (when (re-search-forward
+                               (format "\\\\label{%s}" (regexp-quote bare)) nil t)
+                          (list (buffer-file-name)
+                                (line-number-at-pos (match-beginning 0)))))))))))
+      result)))
 
 (defun czm-tex-find-definition-in-citations (identifier)
   (save-excursion
