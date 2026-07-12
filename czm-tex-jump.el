@@ -227,7 +227,6 @@ Push mark at previous position."
   "Follow reference REF-NAME in the current buffer.
 Searches in the current buffer and in tex files listed in
 \\externaldocument{...} commands."
-  (interactive)
   (cl-flet ((search-for-label (name)
 	             (save-excursion
 		              (goto-char (point-min))
@@ -302,7 +301,6 @@ Searches in bib files listed in \\bibliography{...} commands."
   ;; function is a bit silly.  Why not just use reftex-view-crossref?
   ;; Maybe you'll later want to update this to work in non-file
   ;; buffers, with a "master" bib file?
-  (interactive)
   (let ((pos (point)))
     (save-restriction
       (widen)
@@ -331,13 +329,11 @@ Searches in bib files listed in \\bibliography{...} commands."
 (defun czm-tex-jump-href (href-name)
   "Follow href HREF-NAME.
 This just calls `find-file'."
-  (interactive)
   (find-file href-name))
 
 (defun czm-tex-jump-url (url-name)
   "Follow url URL-NAME.
 This just calls `browse-url'."
-  (interactive)
   (browse-url url-name))
 
 
