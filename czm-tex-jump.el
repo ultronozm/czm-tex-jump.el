@@ -229,6 +229,21 @@ Push mark at previous position."
 ;; (defun czm-tex-jump-goto (_str)
 ;;   (czm-tex-find-definition (czm-tex-identifier-at-point)))
 
+(defun czm-tex-jump--external-documents ()
+  "Return the \\externaldocument declarations of the current buffer.
+The result is a list of (PREFIX FILENAME) lists, in buffer order, where
+PREFIX is nil for unprefixed declarations."
+  (save-excursion
+    (save-restriction
+      (widen)
+      (goto-char (point-min))
+      (let (declarations)
+        (while (re-search-forward
+                "\\\\external\\(?:cite\\)?document\\(?:\\[\\([^]]*\\)\\]\\)?{\\([^}]+\\)}"
+                nil t)
+          (push (list (match-string 1) (match-string 2)) declarations))
+        (nreverse declarations)))))
+
 (defun czm-tex-jump-ref (ref-name)
   "Follow reference REF-NAME in the current buffer.
 Searches in the current buffer and in tex files listed in
@@ -265,38 +280,34 @@ Searches in the current buffer and in tex files listed in
         (recenter)
 	       (when outline-minor-mode
 	         (outline-show-entry)))
-       ;; Search external documents.
-       ((save-restriction
-	         (widen)
-	         (save-excursion
-	           (goto-char (point-min))
-	           (while
-		              (and
-		               (null label-pos)
-		               (re-search-forward
-                  "\\\\external\\(?:cite\\)?document\\(?:\\[\\([^]]*\\)\\]\\)?{\\([^}]+\\)}"
-                  nil t))
-              ;; xr imports label FOO from the external document as
-              ;; PREFIXFOO, so search the external file for the label
-              ;; with the prefix stripped, and skip documents whose
-              ;; prefix does not match.
-	             (let ((prefix (match-string 1))
-                    (external (match-string 2)))
-                (when (or (null prefix) (string-prefix-p prefix ref-name))
-	                 (let*
-		                    ((filename (concat external ".tex"))
-                       (bare-name (if prefix
-                                      (substring ref-name (length prefix))
-                                    ref-name))
-		                     (already-open (find-buffer-visiting filename)))
-		                  (setq buf (or already-open
-			                               (find-file-noselect filename)))
-		                  (setq label-pos (with-current-buffer
-				                                    buf
-				                                  (save-restriction
-				                                    (widen)
-				                                    (search-for-label bare-name))))))))
-	           label-pos))
+       ;; Search external documents.  xr imports label FOO from the
+       ;; external document as PREFIXFOO, so search the external file
+       ;; for the label with the prefix stripped, and skip documents
+       ;; whose prefix does not match.  When several documents define
+       ;; the same label, the one declared last wins, because that is
+       ;; the order in which xr reads the aux files; we therefore probe
+       ;; the declarations in reverse.
+       ((let ((declarations (reverse (czm-tex-jump--external-documents))))
+	         (while (and (null label-pos) declarations)
+	           (let* ((declaration (pop declarations))
+                   (prefix (nth 0 declaration))
+                   (external (nth 1 declaration)))
+              (when (or (null prefix) (string-prefix-p prefix ref-name))
+	               (let*
+		                  ((filename (concat external ".tex"))
+                     (bare-name (if prefix
+                                    (substring ref-name (length prefix))
+                                  ref-name))
+		                   (candidate (or (find-buffer-visiting filename)
+			                                 (find-file-noselect filename)))
+		                   (pos (with-current-buffer candidate
+			                         (save-restriction
+			                           (widen)
+			                           (search-for-label bare-name)))))
+	                 (when pos
+	                   (setq buf candidate
+                          label-pos pos))))))
+	         label-pos)
 	       (switch-to-buffer-other-window buf)
 	       (if (and (>= label-pos (point-min))
 		               (<= label-pos (point-max)))
@@ -408,32 +419,32 @@ This just calls `browse-url'."
   "Find IDENTIFIER's defining \\label in \\externaldocument files.
 Checks every \\externaldocument declaration, honoring optional label
 prefixes: xr imports label FOO from a document declared with prefix P as
-PFOO, so the external file is searched with the prefix stripped."
-  (save-excursion
-    (goto-char (point-min))
-    (let (result)
-      (while (and (null result)
-                  (re-search-forward
-                   "\\\\external\\(?:cite\\)?document\\(?:\\[\\([^]]*\\)\\]\\)?{\\([^}]+\\)}"
-                   nil t))
-        (let ((prefix (match-string 1))
-              (external (match-string 2)))
-          (when (or (null prefix) (string-prefix-p prefix identifier))
-            (let* ((filename (concat external ".tex"))
-                   (bare (if prefix
-                             (substring identifier (length prefix))
-                           identifier))
-                   (buffer (or (find-buffer-visiting filename)
-                               (find-file-noselect filename))))
-              (setq result
-                    (with-current-buffer buffer
-                      (save-excursion
-                        (goto-char (point-min))
-                        (when (re-search-forward
-                               (format "\\\\label{%s}" (regexp-quote bare)) nil t)
-                          (list (buffer-file-name)
-                                (line-number-at-pos (match-beginning 0)))))))))))
-      result)))
+PFOO, so the external file is searched with the prefix stripped.  When
+several documents define the same label, the one declared last wins,
+because that is the order in which xr reads the aux files; we therefore
+probe the declarations in reverse."
+  (let ((declarations (reverse (czm-tex-jump--external-documents)))
+        result)
+    (while (and (null result) declarations)
+      (let* ((declaration (pop declarations))
+             (prefix (nth 0 declaration))
+             (external (nth 1 declaration)))
+        (when (or (null prefix) (string-prefix-p prefix identifier))
+          (let* ((filename (concat external ".tex"))
+                 (bare (if prefix
+                           (substring identifier (length prefix))
+                         identifier))
+                 (buffer (or (find-buffer-visiting filename)
+                             (find-file-noselect filename))))
+            (setq result
+                  (with-current-buffer buffer
+                    (save-excursion
+                      (goto-char (point-min))
+                      (when (re-search-forward
+                             (format "\\\\label{%s}" (regexp-quote bare)) nil t)
+                        (list (buffer-file-name)
+                              (line-number-at-pos (match-beginning 0)))))))))))
+    result))
 
 (defun czm-tex-find-definition-in-citations (identifier)
   (save-excursion
