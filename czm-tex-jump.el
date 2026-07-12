@@ -148,7 +148,7 @@ Push mark at previous position."
 
 (defun czm-tex-jump--embark-target ()
   "Target the TeX reference at point."
-  (let* ((commands '("eqref" "ref" "cite" "href" "url"))
+  (let* ((commands (czm-tex-jump--commands))
          (pattern (rx-to-string
                    `(seq (group "\\"
                                 (group
@@ -209,7 +209,7 @@ Push mark at previous position."
 (defun czm-tex-jump-goto (_str)
   "Jump to the tex reference at point."
   ;; Assumption: the reference name is enclosed by {...}
-  (let* ((commands '("eqref" "ref" "cite" "href" "url"))
+  (let* ((commands (czm-tex-jump--commands))
          (pattern (rx-to-string
                    `(seq (group "\\"
                                 (group
