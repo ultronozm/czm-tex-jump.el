@@ -68,8 +68,7 @@
   (eval `(rx (seq  "\\"
                    (group
                     (or ,@(czm-tex-jump--commands)))
-                   (opt (group "[" (*? nonl)
-                               "]"))
+                   (group (* (seq "[" (*? nonl) "]")))
                    "{"
                    (group (one-or-more (not (any "}"))))
                    "}"))))
@@ -119,8 +118,7 @@ Push mark at previous position."
          (regexp (eval `(rx (seq (group anychar "\\"
                                         (group
                                          (or ,@commands)))
-                                 (opt (group "[" (*? nonl)
-                                             "]"))
+                                 (group (* (seq "[" (*? nonl) "]")))
                                  "{"
                                  (group (one-or-more (not (any "}"))))
                                  "}")))))
@@ -153,8 +151,7 @@ Push mark at previous position."
                    `(seq (group "\\"
                                 (group
                                  (or ,@commands)))
-                         (opt (group "[" (*? nonl)
-                                     "]"))
+                         (group (* (seq "[" (*? nonl) "]")))
                          "{"
                          (group (one-or-more (not (any "}"))))
                          "}")))
@@ -214,8 +211,7 @@ Push mark at previous position."
                    `(seq (group "\\"
                                 (group
                                  (or ,@commands)))
-                         (opt (group "[" (*? nonl)
-                                     "]"))
+                         (group (* (seq "[" (*? nonl) "]")))
                          "{"
                          (group (one-or-more (not (any "}"))))
                          "}"))))
@@ -239,7 +235,7 @@ PREFIX is nil for unprefixed declarations."
       (goto-char (point-min))
       (let (declarations)
         (while (re-search-forward
-                "\\\\external\\(?:cite\\)?document\\(?:\\[\\([^]]*\\)\\]\\)?{\\([^}]+\\)}"
+                "\\\\external\\(?:cite\\)?document\\(?:\\[\\([^]]*\\)\\]\\)?\\(?:\\[nocite\\]\\)?{\\([^}]+\\)}"
                 nil t)
           (push (list (match-string 1) (match-string 2)) declarations))
         (nreverse declarations)))))
