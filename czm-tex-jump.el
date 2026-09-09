@@ -319,36 +319,50 @@ Searches in the current buffer and in tex files listed in
        (t
 	       (message "Label not found: %s" ref-name))))))
 
-(cl-defun czm-tex-jump-cite (cite-name)
+(defun czm-tex-jump-cite (cite-name)
   "Follow citation CITE-NAME in the current buffer.
-Searches in bib files listed in \\bibliography{...} commands."
-  ;; function is a bit silly.  Why not just use reftex-view-crossref?
-  ;; Maybe you'll later want to update this to work in non-file
-  ;; buffers, with a "master" bib file?
-  (let ((pos (point)))
-    (save-restriction
-      (widen)
-      (goto-char (point-min))
-      (if (re-search-forward (format "\\\\bibitem\\(\\[[^]]*\\]\\)?{\\(%s\\)}" (regexp-quote cite-name)) nil t)
-          (progn
-            (goto-char (match-beginning 0))
-            (recenter)
-            (when outline-minor-mode
-              (outline-show-entry)))
-        (condition-case err
-            (let ((bibfiles (czm-tex-util-get-bib-files)))
-              (dolist (bibfile bibfiles)
-                (find-file-other-window bibfile)
-                (goto-char (point-min))
-                (when (re-search-forward (format "@[^{]+{\\(%s\\)," cite-name) nil t)
-                  (goto-char (match-beginning 0))
+Searches in bib files listed in \\bibliography{...} commands.
+Preserve point in the source buffer when visiting a bibliography."
+  (let ((local-pos
+         (save-excursion
+           (save-restriction
+             (widen)
+             (goto-char (point-min))
+             (when (re-search-forward
+                    (format "\\\\bibitem\\(\\[[^]]*\\]\\)?{\\(%s\\)}"
+                            (regexp-quote cite-name)) nil t)
+               (match-beginning 0))))))
+    (if local-pos
+        (save-restriction
+          (widen)
+          (goto-char local-pos)
+          (recenter)
+          (when outline-minor-mode
+            (outline-show-entry)))
+      (condition-case err
+          (let ((bibfiles (czm-tex-util-get-bib-files))
+                target)
+            (while (and bibfiles (not target))
+              (let* ((buffer (find-file-noselect (pop bibfiles)))
+                     (pos
+                      (with-current-buffer buffer
+                        (save-excursion
+                          (goto-char (point-min))
+                          (when (re-search-forward
+                                 (format "@[^{]+{\\(%s\\),"
+                                         (regexp-quote cite-name)) nil t)
+                            (match-beginning 0))))))
+                (when pos
+                  (setq target (cons buffer pos)))))
+            (if target
+                (progn
+                  (switch-to-buffer-other-window (car target))
+                  (goto-char (cdr target))
                   (recenter)
                   (when outline-minor-mode
-                    (outline-show-entry))
-                  (cl-return)))
-              (message "Citation not found: %s" cite-name)
-              (goto-char pos))
-          (error (format "Error message: %s\n" (error-message-string err))))))))
+                    (outline-show-entry)))
+              (message "Citation not found: %s" cite-name)))
+        (error (message "Error message: %s" (error-message-string err)))))))
 
 (defun czm-tex-jump-href (href-name)
   "Follow href HREF-NAME.
