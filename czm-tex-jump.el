@@ -37,6 +37,7 @@
 
 ;;; Code:
 
+(require 'seq)
 (require 'avy)
 (require 'outline)
 (require 'xref)
@@ -107,7 +108,7 @@ ring and yank it.  With numerical prefix ARG, move point to the end of
 the reference, set the mark at the beginning, and activate the mark.
 
 With no prefix argument, jump to the reference.  Use the current buffer
-unless the reference is in an external document (in which case use a
+unless the reference is in another document file (in which case use a
 buffer visiting said document) or outside the current restriction (in
 which case use a new indirect buffer).
 
@@ -240,98 +241,115 @@ PREFIX is nil for unprefixed declarations."
           (push (list (match-string 1) (match-string 2)) declarations))
         (nreverse declarations)))))
 
+(defun czm-tex-jump--search (regexp)
+  "Return the first position matching REGEXP in the current restriction."
+  (save-excursion
+    (goto-char (point-min))
+    (when (re-search-forward regexp nil t)
+      (match-beginning 0))))
+
+(defun czm-tex-jump--search-files (regexp files)
+  "Return (BUFFER . POSITION) for REGEXP in FILES, using live contents."
+  (seq-some
+   (lambda (file)
+     (with-current-buffer (or (find-buffer-visiting file)
+                              (find-file-noselect file))
+       (save-restriction
+         (widen)
+         (when-let* ((pos (czm-tex-jump--search regexp)))
+           (cons (current-buffer) pos)))))
+   files))
+
+(defun czm-tex-jump--document-lookup (lookup)
+  "Call LOOKUP with RefTeX scan information, refreshing once on a miss.
+Non-file buffers use LOOKUP directly, without RefTeX."
+  (with-current-buffer (or (buffer-base-buffer) (current-buffer))
+    (save-excursion
+      (save-restriction
+        (widen)
+        (if (not buffer-file-name)
+            (funcall lookup)
+          ;; Attach to shared or saved scan information before deciding
+          ;; whether a failed lookup needs a refresh.
+          (reftex-access-scan-info -1)
+          (let ((cached (and reftex-docstruct-symbol
+                             (symbol-value reftex-docstruct-symbol))))
+            (reftex-access-scan-info)
+            (or (funcall lookup)
+                (when cached
+                  (reftex-access-scan-info t)
+                  (funcall lookup)))))))))
+
+(defun czm-tex-jump--external-label (name)
+  "Return (BUFFER . POSITION) for NAME in an external document.
+Strip xr prefixes and try later declarations first, as xr does."
+  (seq-some
+   (lambda (declaration)
+     (let ((prefix (car declaration))
+           (file (concat (cadr declaration) ".tex")))
+       (when (or (null prefix) (string-prefix-p prefix name))
+         (czm-tex-jump--search-files
+          (format "\\\\label{%s}"
+                  (regexp-quote (if prefix (substring name (length prefix)) name)))
+          (list file)))))
+   (reverse (czm-tex-jump--external-documents))))
+
+(defun czm-tex-jump--document-label (name)
+  "Return (BUFFER . POSITION) for NAME in included or external files."
+  (czm-tex-jump--document-lookup
+   (lambda ()
+     (or (when buffer-file-name
+           (czm-tex-jump--search-files
+            (format "\\\\label{%s}" (regexp-quote name))
+            (seq-filter #'stringp (reftex-all-document-files))))
+         (czm-tex-jump--external-label name)))))
+
 (defun czm-tex-jump-ref (ref-name)
-  "Follow reference REF-NAME in the current buffer.
-Searches in the current buffer and in tex files listed in
+  "Follow reference REF-NAME in the current TeX document.
+Search the current buffer, files included by the master, and files listed in
 \\externaldocument{...} commands."
-  (cl-flet ((search-for-label (name)
-	             (save-excursion
-		              (goto-char (point-min))
-		              (when (re-search-forward
-		                     (format "\\\\label{%s}" (regexp-quote name))
-                       nil t)
-                  (match-beginning 0)))))
-    (let (label-pos buf)
-      (cond
-       ;; Search current buffer, with narrowing restriction.
-       ((setq label-pos
-	             (search-for-label ref-name))
-	       (goto-char label-pos)
-	       (recenter)
-	       (when outline-minor-mode
-          (condition-case nil
-              (outline-show-entry)
-            (error nil))
-	         ;; (outline-show-entry)
-          ))
-       ;; Search current buffer, without narrowing restriction.
-       ((save-restriction
-	         (widen)
-	         (setq label-pos (search-for-label ref-name)))
-	       (clone-indirect-buffer-other-window
-	        (generate-new-buffer-name (buffer-name))
-         t)
-	       (widen)
-	       (goto-char label-pos)
-        (recenter)
-	       (when outline-minor-mode
-	         (outline-show-entry)))
-       ;; Search external documents.  xr imports label FOO from the
-       ;; external document as PREFIXFOO, so search the external file
-       ;; for the label with the prefix stripped, and skip documents
-       ;; whose prefix does not match.  When several documents define
-       ;; the same label, the one declared last wins, because that is
-       ;; the order in which xr reads the aux files; we therefore probe
-       ;; the declarations in reverse.
-       ((let ((declarations (reverse (czm-tex-jump--external-documents))))
-	         (while (and (null label-pos) declarations)
-	           (let* ((declaration (pop declarations))
-                   (prefix (nth 0 declaration))
-                   (external (nth 1 declaration)))
-              (when (or (null prefix) (string-prefix-p prefix ref-name))
-	               (let*
-		                  ((filename (concat external ".tex"))
-                     (bare-name (if prefix
-                                    (substring ref-name (length prefix))
-                                  ref-name))
-		                   (candidate (or (find-buffer-visiting filename)
-			                                 (find-file-noselect filename)))
-		                   (pos (with-current-buffer candidate
-			                         (save-restriction
-			                           (widen)
-			                           (search-for-label bare-name)))))
-	                 (when pos
-	                   (setq buf candidate
-                          label-pos pos))))))
-	         label-pos)
-	       (switch-to-buffer-other-window buf)
-	       (if (and (>= label-pos (point-min))
-		               (<= label-pos (point-max)))
-	           (goto-char label-pos)
-	         (clone-indirect-buffer-other-window
-	          (generate-new-buffer-name (buffer-name))
-           t)
-	         (widen)
-	         (goto-char label-pos))
-	       (recenter)
-	       (when outline-minor-mode
-	         (outline-show-entry)))
-       (t
-	       (message "Label not found: %s" ref-name))))))
+  (let* ((regexp (format "\\\\label{%s}" (regexp-quote ref-name)))
+         (local (czm-tex-jump--search regexp))
+         (wide (or local (save-restriction
+                           (widen)
+                           (czm-tex-jump--search regexp))))
+         (target (if wide (cons (current-buffer) wide)
+                   (czm-tex-jump--document-label ref-name))))
+    (if (not target)
+        (message "Label not found: %s" ref-name)
+      (unless (eq (car target) (current-buffer))
+        (switch-to-buffer-other-window (car target)))
+      (unless (<= (point-min) (cdr target) (point-max))
+        (clone-indirect-buffer-other-window
+         (generate-new-buffer-name (buffer-name)) t)
+        (widen))
+      (goto-char (cdr target))
+      (recenter)
+      (when outline-minor-mode
+        (if local
+            (condition-case nil (outline-show-entry) (error nil))
+          (outline-show-entry))))))
+
+(defun czm-tex-jump--bibliography-files ()
+  "Return bibliography files, resolving TeX paths from the master.
+Non-file buffers retain their local bibliography lookup."
+  (if buffer-file-name
+      ;; Unlike `reftex-get-bibfile-list', an absent declaration is a
+      ;; lookup miss, so the caller can refresh stale scan information.
+      (when (assq 'bib (symbol-value reftex-docstruct-symbol))
+        (reftex-get-bibfile-list))
+    (czm-tex-util-get-bib-files)))
 
 (defun czm-tex-jump-cite (cite-name)
   "Follow citation CITE-NAME in the current buffer.
-Searches in bib files listed in \\bibliography{...} commands.
+Searches in bib files declared locally or in the master TeX document.
 Preserve point in the source buffer when visiting a bibliography."
   (let ((local-pos
-         (save-excursion
-           (save-restriction
-             (widen)
-             (goto-char (point-min))
-             (when (re-search-forward
-                    (format "\\\\bibitem\\(\\[[^]]*\\]\\)?{\\(%s\\)}"
-                            (regexp-quote cite-name)) nil t)
-               (match-beginning 0))))))
+         (save-restriction
+           (widen)
+           (czm-tex-jump--search
+            (format "\\\\bibitem\\(\\[[^]]*\\]\\)?{\\(%s\\)}"
+                    (regexp-quote cite-name))))))
     (if local-pos
         (save-restriction
           (widen)
@@ -340,23 +358,19 @@ Preserve point in the source buffer when visiting a bibliography."
           (when outline-minor-mode
             (outline-show-entry)))
       (condition-case err
-          (let ((bibfiles (czm-tex-util-get-bib-files))
-                target)
-            (while (and bibfiles (not target))
-              (let* ((buffer (find-file-noselect (pop bibfiles)))
-                     (pos
-                      (with-current-buffer buffer
-                        (save-excursion
-                          (goto-char (point-min))
-                          (when (re-search-forward
-                                 (format "@[^{]+{\\(%s\\),"
-                                         (regexp-quote cite-name)) nil t)
-                            (match-beginning 0))))))
-                (when pos
-                  (setq target (cons buffer pos)))))
+          (let ((target
+                 (czm-tex-jump--document-lookup
+                  (lambda ()
+                    (czm-tex-jump--search-files
+                     (format "@[^{]+{\\(%s\\)," (regexp-quote cite-name))
+                     (czm-tex-jump--bibliography-files))))))
             (if target
                 (progn
                   (switch-to-buffer-other-window (car target))
+                  (unless (<= (point-min) (cdr target) (point-max))
+                    (clone-indirect-buffer-other-window
+                     (generate-new-buffer-name (buffer-name)) t)
+                    (widen))
                   (goto-char (cdr target))
                   (recenter)
                   (when outline-minor-mode
@@ -417,7 +431,12 @@ This just calls `browse-url'."
       (list (czm-tex-find-definition-in-href identifier)))
      (t
       (setq ref-location (czm-tex-find-definition-in-current-buffer identifier))
-      (or ref-location (czm-tex-find-definition-in-external-docs identifier))))))
+      (or ref-location
+          (when-let* ((target (czm-tex-jump--document-label identifier)))
+            (with-current-buffer (car target)
+              (save-restriction
+                (widen)
+                (list buffer-file-name (line-number-at-pos (cdr target)))))))))))
 
 (defun czm-tex-find-definition-in-current-buffer (identifier)
   (save-excursion
@@ -426,35 +445,12 @@ This just calls `browse-url'."
       (list (buffer-file-name) (line-number-at-pos (match-beginning 0))))))
 
 (defun czm-tex-find-definition-in-external-docs (identifier)
-  "Find IDENTIFIER's defining \\label in \\externaldocument files.
-Checks every \\externaldocument declaration, honoring optional label
-prefixes: xr imports label FOO from a document declared with prefix P as
-PFOO, so the external file is searched with the prefix stripped.  When
-several documents define the same label, the one declared last wins,
-because that is the order in which xr reads the aux files; we therefore
-probe the declarations in reverse."
-  (let ((declarations (reverse (czm-tex-jump--external-documents)))
-        result)
-    (while (and (null result) declarations)
-      (let* ((declaration (pop declarations))
-             (prefix (nth 0 declaration))
-             (external (nth 1 declaration)))
-        (when (or (null prefix) (string-prefix-p prefix identifier))
-          (let* ((filename (concat external ".tex"))
-                 (bare (if prefix
-                           (substring identifier (length prefix))
-                         identifier))
-                 (buffer (or (find-buffer-visiting filename)
-                             (find-file-noselect filename))))
-            (setq result
-                  (with-current-buffer buffer
-                    (save-excursion
-                      (goto-char (point-min))
-                      (when (re-search-forward
-                             (format "\\\\label{%s}" (regexp-quote bare)) nil t)
-                        (list (buffer-file-name)
-                              (line-number-at-pos (match-beginning 0)))))))))))
-    result))
+  "Find IDENTIFIER's defining label in external documents."
+  (when-let* ((target (czm-tex-jump--external-label identifier)))
+    (with-current-buffer (car target)
+      (save-restriction
+        (widen)
+        (list buffer-file-name (line-number-at-pos (cdr target)))))))
 
 (defun czm-tex-find-definition-in-citations (identifier)
   (save-excursion
